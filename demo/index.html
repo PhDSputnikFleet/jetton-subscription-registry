@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Jetton Access Registry - TON Connect Demo</title>
+<style>
+  :root {
+    --bg: #0b0e14;
+    --card: #141a24;
+    --border: #243040;
+    --text: #e6edf3;
+    --muted: #8b98a9;
+    --accent: #2f9bff;
+    --ok: #2ec27e;
+    --bad: #ff5c5c;
+    --warn: #e0a829;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 24px 16px 64px;
+  }
+  header h1 {
+    font-size: 20px;
+    margin: 0 0 4px;
+    letter-spacing: -0.01em;
+  }
+  header p {
+    margin: 0 0 20px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+  .card h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin: 0 0 12px;
+    font-weight: 600;
+  }
+  .row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 7px 0;
+    font-size: 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .row:last-child { border-bottom: none; }
+  .row .k { color: var(--muted); flex: 0 0 auto; }
+  .row .v {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    text-align: right;
+    word-break: break-all;
+    color: var(--text);
+  }
+  .net-pill {
+    display: inline-block;
+    font-size: 11px;
+    font-family: var(--mono);
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .net-pill.testnet { color: var(--warn); border-color: var(--warn); }
+  .net-pill.mainnet { color: var(--ok); border-color: var(--ok); }
+  button {
+    appearance: none;
+    border: none;
+    border-radius: 10px;
+    padding: 13px 18px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+    transition: opacity 0.15s, transform 0.05s;
+  }
+  button:active { transform: translateY(1px); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  button.primary { background: var(--accent); color: #fff; }
+  button.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
+  .btn-stack { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+  #connect { margin-bottom: 16px; }
+  .status {
+    margin-top: 14px;
+    font-size: 13.5px;
+    font-family: var(--mono);
+    padding: 11px 13px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    white-space: pre-wrap;
+    word-break: break-all;
+    display: none;
+  }
+  .status.show { display: block; }
+  .status.ok { border-color: var(--ok); color: var(--ok); }
+  .status.bad { border-color: var(--bad); color: var(--bad); }
+  .status.warn { border-color: var(--warn); color: var(--warn); }
+  .access-badge {
+    font-size: 17px;
+    font-weight: 700;
+    text-align: center;
+    padding: 14px;
+    border-radius: 10px;
+    margin-top: 14px;
+    display: none;
+  }
+  .access-badge.show { display: block; }
+  .access-badge.valid { background: rgba(46,194,126,0.12); color: var(--ok); border: 1px solid var(--ok); }
+  .access-badge.invalid { background: rgba(255,92,92,0.12); color: var(--bad); border: 1px solid var(--bad); }
+  a { color: var(--accent); }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 10px; }
+  code { font-family: var(--mono); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Jetton Access Registry</h1>
+    <p>On-chain access grant via a TEP-74 jetton transfer, signed by your own wallet. No backend involved.</p>
+  </header>
+
+  <div id="connect"></div>
+
+  <div class="card">
+    <h2>Payment details</h2>
+    <div class="row"><span class="k">Network</span><span class="v"><span id="net-pill" class="net-pill">-</span></span></div>
+    <div class="row"><span class="k">Registry (recipient)</span><span class="v" id="d-registry">-</span></div>
+    <div class="row"><span class="k">Jetton master (USDT)</span><span class="v" id="d-jetton">-</span></div>
+    <div class="row"><span class="k">Amount (min units)</span><span class="v" id="d-amount">-</span></div>
+    <div class="row"><span class="k">Access code</span><span class="v" id="d-code">-</span></div>
+  </div>
+
+  <div class="card">
+    <h2>Actions</h2>
+    <div class="btn-stack">
+      <button id="pay" class="primary" disabled>Pay</button>
+      <button id="check" class="secondary">Check access</button>
+    </div>
+    <div id="status" class="status"></div>
+    <div id="access" class="access-badge"></div>
+    <div class="hint">
+      Pay sends a jetton transfer with your access <code>code</code> in the forward payload to the
+      registry. The registry records the grant on-chain when its own jetton wallet is notified.
+      Then "Check access" reads the <code>access(code)</code> get-method.
+    </div>
+  </div>
+
+  <p class="hint" id="cfg-error" style="color:var(--bad)"></p>
+</div>
+
+<script src="https://unpkg.com/@tonconnect/ui@2/dist/tonconnect-ui.min.js"></script>
+<script type="module">
+  import { Address, beginCell, toNano, Cell } from "https://esm.sh/@ton/core@0.60.0";
+
+  // ---- config from URL query params ----
+  const q = new URLSearchParams(location.search);
+  const cfg = {
+    registry:     q.get("registry")     || "",
+    jettonMaster: q.get("jettonMaster") || "",
+    amount:       q.get("amount")        || "0",      // jetton minimal units
+    code:         q.get("code")          || "0",      // uint32
+    net:          (q.get("net") || "mainnet").toLowerCase() === "testnet" ? "testnet" : "mainnet",
+  };
+
+  const API_BASE = cfg.net === "testnet" ? "https://testnet.tonapi.io" : "https://tonapi.io";
+  const FORWARD_TON = "0.05";   // TON attached for the transfer-notification to the registry
+  const TRANSFER_GAS = "100000000"; // 0.1 TON (minimal units) attached to the jetton-wallet message
+
+  // ---- render config ----
+  const $ = (id) => document.getElementById(id);
+  $("d-registry").textContent = cfg.registry || "(missing)";
+  $("d-jetton").textContent   = cfg.jettonMaster || "(missing)";
+  $("d-amount").textContent   = cfg.amount;
+  $("d-code").textContent     = cfg.code;
+  const pill = $("net-pill");
+  pill.textContent = cfg.net;
+  pill.className = "net-pill " + cfg.net;
+
+  const cfgErrors = [];
+  if (!cfg.registry) cfgErrors.push("registry");
+  if (!cfg.jettonMaster) cfgErrors.push("jettonMaster");
+  if (!cfg.amount || cfg.amount === "0") cfgErrors.push("amount");
+  if (cfgErrors.length) {
+    $("cfg-error").textContent =
+      "Missing/empty URL params: " + cfgErrors.join(", ") +
+      ". Append them to the URL, e.g. ?registry=...&jettonMaster=...&amount=...&code=1&net=testnet";
+  }
+
+  function setStatus(msg, kind) {
+    const el = $("status");
+    el.textContent = msg;
+    el.className = "status show" + (kind ? " " + kind : "");
+  }
+  function setAccess(valid) {
+    const el = $("access");
+    el.textContent = valid ? "ACCESS VALID ✓" : "NO ACCESS ✗";
+    el.className = "access-badge show " + (valid ? "valid" : "invalid");
+  }
+
+  // ---- TON Connect UI ----
+  const { TonConnectUI } = window.TON_CONNECT_UI;
+  const tonConnectUI = new TonConnectUI({
+    manifestUrl: new URL("tonconnect-manifest.json", location.href).href,
+    buttonRootId: "connect",
+  });
+
+  const payBtn = $("pay");
+  function refreshPayBtn() {
+    payBtn.disabled = !(tonConnectUI.connected && cfgErrors.length === 0);
+  }
+  tonConnectUI.onStatusChange(() => refreshPayBtn());
+  refreshPayBtn();
+
+  // ---- tonapi get-method helper ----
+  async function runGetMethod(account, method, args) {
+    const url = new URL(`${API_BASE}/v2/blockchain/accounts/${account}/methods/${method}`);
+    (args || []).forEach((a) => url.searchParams.append("args", a));
+    const res = await fetch(url.toString(), { headers: { Accept: "application/json" } });
+    if (!res.ok) throw new Error(`tonapi ${method} HTTP ${res.status}`);
+    return res.json();
+  }
+
+  // Resolve the payer's jetton wallet for the configured jetton master.
+  async function resolveJettonWallet(ownerAddress) {
+    const data = await runGetMethod(cfg.jettonMaster, "get_wallet_address", [ownerAddress]);
+    if (data.success === false || (data.exit_code && data.exit_code !== 0)) {
+      throw new Error("get_wallet_address failed (exit " + data.exit_code + ")");
+    }
+    // Prefer tonapi's decoded value, fall back to parsing the returned cell.
+    if (data.decoded && data.decoded.jetton_wallet_address) {
+      return data.decoded.jetton_wallet_address;
+    }
+    const top = data.stack && data.stack[0];
+    if (top && (top.type === "cell" || top.type === "slice") && top.cell) {
+      const cell = Cell.fromBoc(hexToBytes(top.cell))[0];
+      return cell.beginParse().loadAddress().toString();
+    }
+    throw new Error("could not parse jetton wallet from response");
+  }
+
+  // tonapi returns stack ints as (possibly signed) decimal or 0x-hex strings.
+  function parseSignedInt(s) {
+    if (s === undefined || s === null) return 0n;
+    let str = String(s).trim();
+    let neg = false;
+    if (str[0] === "-") { neg = true; str = str.slice(1); }
+    const v = str === "" ? 0n : BigInt(str);
+    return neg ? -v : v;
+  }
+
+  // Decode a BoC hex string (as returned by tonapi stack entries) to bytes.
+  function hexToBytes(hex) {
+    const clean = hex.replace(/^0x/, "");
+    const out = new Uint8Array(clean.length / 2);
+    for (let i = 0; i < out.length; i++) out[i] = parseInt(clean.substr(i * 2, 2), 16);
+    return out;
+  }
+
+  // Build the TEP-74 jetton transfer body (op 0x0f8a7ea5) client-side.
+  function buildJettonTransferBody(ownerAddress) {
+    const forwardPayload = beginCell()
+      .storeUint(Number(cfg.code) >>> 0, 32) // access code: uint32 at START of forward payload
+      .endCell();
+
+    return beginCell()
+      .storeUint(0x0f8a7ea5, 32)                 // op: jetton transfer
+      .storeUint(0n, 64)                         // query_id
+      .storeCoins(BigInt(cfg.amount))            // jetton amount (minimal units)
+      .storeAddress(Address.parse(cfg.registry)) // destination = registry
+      .storeAddress(Address.parse(ownerAddress)) // response_destination = payer
+      .storeBit(0)                               // custom_payload: none
+      .storeCoins(toNano(FORWARD_TON))           // forward_ton_amount (funds the notification)
+      .storeBit(1)                               // forward_payload stored as a ref cell
+      .storeRef(forwardPayload)
+      .endCell();
+  }
+
+  // ---- Pay ----
+  payBtn.addEventListener("click", async () => {
+    try {
+      $("access").className = "access-badge";
+      payBtn.disabled = true;
+      setStatus("Resolving your jetton wallet…", "warn");
+
+      const owner = tonConnectUI.account?.address;
+      if (!owner) throw new Error("wallet not connected");
+
+      const payerJettonWallet = await resolveJettonWallet(owner);
+      setStatus("Building transfer & opening wallet…\njetton wallet: " + payerJettonWallet, "warn");
+
+      const body = buildJettonTransferBody(owner);
+      const bocBase64 = body.toBoc().toString("base64");
+
+      await tonConnectUI.sendTransaction({
+        validUntil: Math.floor(Date.now() / 1000) + 300,
+        messages: [
+          {
+            address: payerJettonWallet,
+            amount: TRANSFER_GAS,
+            payload: bocBase64,
+          },
+        ],
+      });
+
+      setStatus("Transaction sent. Wait ~15-30s, then press “Check access”.", "ok");
+    } catch (e) {
+      setStatus("Pay failed: " + (e && e.message ? e.message : e), "bad");
+    } finally {
+      refreshPayBtn();
+    }
+  });
+
+  // ---- Check access ----
+  $("check").addEventListener("click", async () => {
+    try {
+      $("access").className = "access-badge";
+      if (!cfg.registry) throw new Error("registry param missing");
+      setStatus("Reading access(" + cfg.code + ") from registry…", "warn");
+
+      const data = await runGetMethod(cfg.registry, "access", [String(Number(cfg.code) >>> 0)]);
+      if (data.success === false || (data.exit_code && data.exit_code !== 0)) {
+        throw new Error("access() reverted (exit " + data.exit_code + ")");
+      }
+
+      let valid = false;
+      if (data.decoded && typeof data.decoded.valid !== "undefined") {
+        valid = !!data.decoded.valid;
+      } else {
+        const top = data.stack && data.stack[0];
+        // get-method returning a bool yields an int: -1 (true) or 0 (false).
+        const raw = top ? (top.num ?? top.value ?? top.int) : "0";
+        valid = parseSignedInt(raw) !== 0n;
+      }
+
+      setStatus("access(" + cfg.code + ") = " + valid, valid ? "ok" : "bad");
+      setAccess(valid);
+    } catch (e) {
+      setStatus("Check failed: " + (e && e.message ? e.message : e), "bad");
+    }
+  });
+</script>
+</body>
+</html>
