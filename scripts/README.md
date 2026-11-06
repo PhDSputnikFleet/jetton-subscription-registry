@@ -29,6 +29,11 @@ npm run build   # generates build/JettonSubscriptionRegistry_* used by the deplo
 
 Export them inline or via a `.env` loaded by your shell. Do not commit secrets.
 
+> **Note on RPC.** Anonymous toncenter is heavily rate-limited (HTTP 429). Get a free
+> [toncenter API key](https://t.me/tonapibot) and set `TONCENTER_API_KEY`, or point
+> `TONCENTER_ENDPOINT` at your own node. The live testnet instance in the repo README was
+> deployed through the tonhub v4 gateway (`https://testnet-v4.tonhubapi.com`) as a fallback.
+
 ## Usage
 
 ```bash
