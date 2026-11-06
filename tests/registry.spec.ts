@@ -6,8 +6,19 @@ import '@ton/test-utils';
 const PRICE = 2_000_000n;   // 2 USDT in micro (6 decimals)
 const PERIOD = 2_592_000n;  // 30 days in seconds
 
-function codePayload(code: bigint): Slice {
-    return beginCell().storeUint(code, 32).endCell().asSlice();
+// TEP-74 forward_payload is (Either Cell ^Cell): a selector bit, then the payload
+// inline (selector 0) or in a referenced cell (selector 1). Real wallets AND our
+// SDK (storeBit(true)+storeRef) use the ref form — the default we test against.
+function codePayloadRef(code: bigint): Slice {
+    return beginCell()
+        .storeBit(true)
+        .storeRef(beginCell().storeUint(code, 32).endCell())
+        .endCell()
+        .asSlice();
+}
+// The inline alternative, which the contract must also accept.
+function codePayloadInline(code: bigint): Slice {
+    return beginCell().storeBit(false).storeUint(code, 32).endCell().asSlice();
 }
 
 describe('JettonSubscriptionRegistry', () => {
@@ -33,17 +44,17 @@ describe('JettonSubscriptionRegistry', () => {
         await reg.send(owner.getSender(), { value: toNano('0.05') }, { $$type: 'SetJettonWallet', wallet: jwallet.address });
     });
 
-    const notify = (from: SandboxContract<TreasuryContract>, amount: bigint, code: bigint) =>
+    const notify = (from: SandboxContract<TreasuryContract>, amount: bigint, payload: Slice) =>
         reg.send(from.getSender(), { value: toNano('0.05') }, {
             $$type: 'JettonTransferNotification',
             queryId: 0n,
             amount,
             sender: payer.address,
-            forwardPayload: codePayload(code),
+            forwardPayload: payload,
         });
 
-    it('records a grant on a covering payment and reports access', async () => {
-        await notify(jwallet, PRICE, 7788n);
+    it('records a grant on a covering payment (ref payload, as the SDK sends)', async () => {
+        await notify(jwallet, PRICE, codePayloadRef(7788n));
         expect(await reg.getAccess(7788n)).toBe(true);
         const g = await reg.getGrant(7788n);
         expect(g?.payer.toString()).toBe(payer.address.toString());
@@ -51,20 +62,46 @@ describe('JettonSubscriptionRegistry', () => {
         expect((await reg.getConfig()).total).toBe(1n);
     });
 
+    it('also accepts an inline forward payload', async () => {
+        await notify(jwallet, PRICE, codePayloadInline(4321n));
+        expect(await reg.getAccess(4321n)).toBe(true);
+    });
+
     it('accepts overpayment', async () => {
-        await notify(jwallet, PRICE * 2n, 1234n);
+        await notify(jwallet, PRICE * 2n, codePayloadRef(1234n));
         expect(await reg.getAccess(1234n)).toBe(true);
     });
 
     it('ignores an underpaid transfer (no grant)', async () => {
-        await notify(jwallet, PRICE - 1n, 5555n);
+        await notify(jwallet, PRICE - 1n, codePayloadRef(5555n));
         expect(await reg.getAccess(5555n)).toBe(false);
         expect((await reg.getConfig()).total).toBe(0n);
     });
 
     it('rejects a spoofed notification from a non-jetton-wallet sender', async () => {
-        await notify(attacker, PRICE, 9999n);
+        await notify(attacker, PRICE, codePayloadRef(9999n));
         expect(await reg.getAccess(9999n)).toBe(false);
+    });
+
+    it('renewal to an existing code does not double-count total', async () => {
+        await notify(jwallet, PRICE, codePayloadRef(100n));
+        await notify(jwallet, PRICE, codePayloadRef(100n));
+        expect((await reg.getConfig()).total).toBe(1n);
+        expect(await reg.getAccess(100n)).toBe(true);
+    });
+
+    it('refuses payments until the jetton wallet is configured', async () => {
+        const fresh = blockchain.openContract(
+            await JettonSubscriptionRegistry.fromInit(owner.address, PRICE, PERIOD),
+        );
+        await fresh.send(owner.getSender(), { value: toNano('0.1') }, { $$type: 'Deploy', queryId: 0n });
+        // jettonWallet is still the init placeholder (== owner); a payment must be refused
+        const res = await fresh.send(owner.getSender(), { value: toNano('0.05') }, {
+            $$type: 'JettonTransferNotification',
+            queryId: 0n, amount: PRICE, sender: payer.address, forwardPayload: codePayloadRef(1n),
+        });
+        expect(res.transactions).toHaveTransaction({ to: fresh.address, success: false });
+        expect(await fresh.getAccess(1n)).toBe(false);
     });
 
     it('unknown code has no access', async () => {
@@ -77,5 +114,26 @@ describe('JettonSubscriptionRegistry', () => {
         });
         expect(bad.transactions).toHaveTransaction({ from: attacker.address, to: reg.address, success: false });
         expect((await reg.getConfig()).price).toBe(PRICE);
+    });
+
+    it('withdraw sends a jetton transfer from our jetton wallet to the destination', async () => {
+        await notify(jwallet, PRICE, codePayloadRef(1n));
+        const res = await reg.send(owner.getSender(), { value: toNano('0.1') }, {
+            $$type: 'WithdrawJettons', amount: PRICE, to: owner.address,
+        });
+        // the registry must emit a jetton transfer (op 0x0f8a7ea5) to its jetton wallet
+        expect(res.transactions).toHaveTransaction({
+            from: reg.address,
+            to: jwallet.address,
+            op: 0x0f8a7ea5,
+            success: true,
+        });
+    });
+
+    it('only owner can withdraw', async () => {
+        const bad = await reg.send(attacker.getSender(), { value: toNano('0.1') }, {
+            $$type: 'WithdrawJettons', amount: PRICE, to: attacker.address,
+        });
+        expect(bad.transactions).toHaveTransaction({ from: attacker.address, to: reg.address, success: false });
     });
 });

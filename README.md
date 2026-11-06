@@ -39,7 +39,8 @@ Messages:
 - `JettonTransferNotification` (TEP-74, op `0x7362d09c`) — the payment path (from the jetton wallet).
 - `SetJettonWallet { wallet }` — owner sets the contract's own USDT jetton wallet (the anti-spoof anchor).
 - `SetPrice { price, period }` — owner sets the price (micro-USDT) and subscription length (seconds).
-- `"withdraw"` — owner-triggered sweep of collected USDT (transfer body built in the integration layer).
+- `WithdrawJettons { amount, to }` — owner sweeps collected USDT: the contract emits a TEP-74 jetton
+  transfer (op `0x0f8a7ea5`) from its own jetton wallet to `to`.
 
 Get-methods:
 - `access(code): Bool` — is the grant for `code` still valid (now < expiresAt)?
@@ -94,7 +95,7 @@ See `sdk/` for the full API and `demo/` for a standalone wallet→pay→read pag
 
 | | |
 |---|---|
-| Registry | [`kQCbeOQwL7kHBLfreG7Ib8VDDI2L7ZbdDBYviZDN5FjA4cjB`](https://testnet.tonviewer.com/kQCbeOQwL7kHBLfreG7Ib8VDDI2L7ZbdDBYviZDN5FjA4cjB) |
+| Registry | [`kQCl0kxWOtWz_OLYXAgxcTHw2jKxDRAjNIg7rIdeBLGEEgsg`](https://testnet.tonviewer.com/kQCl0kxWOtWz_OLYXAgxcTHw2jKxDRAjNIg7rIdeBLGEEgsg) |
 | State | `active` — `config()` get-method returns exit 0 on-chain |
 | Project token | Sputnik / SPUT — [`EQDMHUcRLHtcTzjSeq2KnZWdi8q_Ek923O1cFeDl_RiwpkeJ`](https://testnet.tonviewer.com/EQDMHUcRLHtcTzjSeq2KnZWdi8q_Ek923O1cFeDl_RiwpkeJ) (see [docs/TOKENOMICS.md](docs/TOKENOMICS.md)) |
 

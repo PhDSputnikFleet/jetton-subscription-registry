@@ -37,7 +37,8 @@ the registry — the project token is a SEPARATE jetton; coupling them would blo
    (test) USDT with a code → read `access(code)` back. No bot. Runs standalone.
 3. **Deploy** (`scripts/`): Blueprint-style deploy to **testnet**, `setJettonWallet`, `setPrice`,
    a read-script. Mainnet path documented, gated. **DONE + live on testnet:**
-   `kQCbeOQwL7kHBLfreG7Ib8VDDI2L7ZbdDBYviZDN5FjA4cjB` (state `active`, `config()` exit 0).
+   `kQCl0kxWOtWz_OLYXAgxcTHw2jKxDRAjNIg7rIdeBLGEEgsg` (state `active`, `config()` exit 0; redeployed
+   after the pre-submission security fixes — see docs/SECURITY.md).
 4. **Audit prep** (`docs/SECURITY.md`): threat model + self-review (access control, bounce handling,
    over/underpay, storage growth, replay). Sets up the external audit the grant funds.
 5. **Token (testnet)** + **tokenomics** (`docs/TOKENOMICS.md`): deploy a project jetton on testnet;

@@ -21,6 +21,21 @@ message(0x7362d09c) JettonTransferNotification {
 // Admin ops.
 message SetJettonWallet { wallet: Address; }          // this contract's own USDT jetton wallet
 message SetPrice { price: Int as coins; period: Int as uint32; }
+// Owner sweeps collected jettons: `amount` (read off-chain from the jetton wallet
+// balance) is forwarded to `to`.
+message WithdrawJettons { amount: Int as coins; to: Address; }
+
+// TEP-74 jetton transfer (op 0x0f8a7ea5) — the body WE send to our own jetton
+// wallet to move tokens out on withdraw.
+message(0x0f8a7ea5) JettonTransferOut {
+    queryId: Int as uint64;
+    amount: Int as coins;
+    destination: Address;          // where the jettons go
+    responseDestination: Address;  // excess TON refund
+    customPayload: Cell?;
+    forwardTonAmount: Int as coins;
+    forwardPayload: Slice as remaining;
+}
 
 struct Grant {
     payer: Address;
@@ -55,15 +70,31 @@ contract JettonSubscriptionRegistry with Deployable {
 
     // Core: a USDT transfer landed on our jetton wallet.
     receive(msg: JettonTransferNotification) {
+        // The jetton wallet MUST be configured to a real address first; otherwise
+        // it is still the init placeholder (== owner) and the anti-spoof anchor is
+        // meaningless. Refuse payments until SetJettonWallet has been called.
+        require(self.jettonWallet != self.owner, "jetton wallet not configured");
         // Anti-spoof: only our own jetton wallet may notify us. Without this an
         // attacker could fake a notification from any address.
         require(sender() == self.jettonWallet, "not our jetton wallet");
         // Underpaid transfers are ignored (no grant); overpaid are accepted.
         require(msg.amount >= self.price, "underpaid");
 
-        // The code travels as a uint32 at the start of the forward payload.
-        let code: Int = msg.forwardPayload.loadUint(32);
+        // TEP-74 forward_payload is (Either Cell ^Cell): a 1-bit selector, then the
+        // payload either inline in the remaining bits or in a referenced cell. Real
+        // wallets (and our SDK) store it as a ref (selector = 1); handle both forms.
+        let fp: Slice = msg.forwardPayload;
+        if (fp.loadBit()) {
+            fp = fp.loadRef().beginParse();
+        }
+        // The code travels as a uint32 at the start of the (unwrapped) payload.
+        let code: Int = fp.loadUint(32);
 
+        // total counts UNIQUE grants: a repeat payment to an existing code renews it
+        // (last-write-wins) without double-counting.
+        if (self.grants.get(code) == null) {
+            self.total = self.total + 1;
+        }
         let nowTs: Int = now();
         self.grants.set(code, Grant{
             payer: msg.sender,
@@ -71,7 +102,6 @@ contract JettonSubscriptionRegistry with Deployable {
             paidAt: nowTs,
             expiresAt: nowTs + self.period,
         });
-        self.total = self.total + 1;
     }
 
     receive(msg: SetJettonWallet) {
@@ -85,14 +115,27 @@ contract JettonSubscriptionRegistry with Deployable {
         self.period = msg.period;
     }
 
-    // Sweep collected USDT to the owner: tell our jetton wallet to transfer its
-    // whole balance out. `amount` of jettons is passed by the owner (read off-chain).
-    receive("withdraw") {
+    // Sweep collected jettons: instruct our own jetton wallet to transfer `amount`
+    // to `msg.to`. Only the contract (owner of its jetton wallet) can move those
+    // tokens, so this MUST happen on-chain here — it cannot be done off-chain.
+    receive(msg: WithdrawJettons) {
         require(sender() == self.owner, "only owner");
-        // Forward a jetton transfer request to our jetton wallet; it moves tokens
-        // to the owner. (Amount handling kept simple: owner triggers, wallet moves.)
-        // Left as an owner-triggered action; full jetton-transfer body is added in
-        // the SDK/integration layer to keep the on-chain surface minimal.
+        require(self.jettonWallet != self.owner, "jetton wallet not configured");
+        send(SendParameters{
+            to: self.jettonWallet,
+            value: 0,
+            mode: SendRemainingValue,   // fund the transfer from the incoming message
+            body: JettonTransferOut{
+                queryId: 0,
+                amount: msg.amount,
+                destination: msg.to,
+                responseDestination: self.owner,
+                customPayload: null,
+                forwardTonAmount: 0,
+                // empty forward payload: Either = left (inline), zero-length
+                forwardPayload: beginCell().storeUint(0, 1).endCell().asSlice(),
+            }.toCell(),
+        });
     }
 
     // ---- get-methods: the on-chain source of truth a Mini App reads ----
