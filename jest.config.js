@@ -1,1 +1,6 @@
-module.exports = { preset: 'ts-jest', testEnvironment: 'node', testPathIgnorePatterns: ['/node_modules/'] };
+module.exports = {
+  preset: 'ts-jest',
+  testEnvironment: 'node',
+  roots: ['<rootDir>/tests'],
+  testPathIgnorePatterns: ['/node_modules/', '/sdk/', '/scripts/'],
+};
