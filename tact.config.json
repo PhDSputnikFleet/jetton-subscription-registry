@@ -1,0 +1,10 @@
+{
+  "projects": [
+    {
+      "name": "JettonSubscriptionRegistry",
+      "path": "./contracts/jetton_subscription_registry.tact",
+      "output": "./build",
+      "options": { "debug": true }
+    }
+  ]
+}
