@@ -1,0 +1,27 @@
+{
+  "name": "jetton-subscription-registry-sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for the on-chain USDT (jetton) subscription / access-grant registry on TON \u2014 read access grants and build TON Connect jetton payments.",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@ton/core": "^0.62.0",
+    "@ton/ton": "^15.2.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "@types/jest": "^29.5.12"
+  }
+}
